@@ -1,15 +1,15 @@
 package controllers
 
 import (
+    "io/ioutil"
+	"github.com/httprouter"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
     "strconv"
-    "io/ioutil"
-	"github.com/httprouter"
-	"gopkg.in/mgo.v2"
-	 "gopkg.in/mgo.v2/bson"
 )
 
 
@@ -17,6 +17,8 @@ import (
 type LocationController struct {
 		session *mgo.Session
 	}
+
+//Specs about IO structs
 
 
 type InputAddress struct {
@@ -44,7 +46,7 @@ type OutputAddress struct {
 		}
 	}
 
-//------The total structure for google response--------------------------
+//struct for google response
 
 type GoogleResponse struct {
 	Results []GoogleResult
@@ -72,6 +74,7 @@ type Geometry struct {
 	Type     string
 	Viewport Bounds
 }
+
 type Bounds struct {
 	NorthEast, SouthWest Point
 }
@@ -80,15 +83,15 @@ type Point struct {
 	Lat float64
 	Lng float64
 }
-//-------------------------//---------------------//----------------------------------
 
 
-// NewLocationController provides a reference to a LocationController with provided mongo session
+
+// reference to a LocationController for mongo session
 func NewLocationController(s *mgo.Session) *LocationController {
 	return &LocationController{s}
 }
 
-//The func to find google's response-----------------------------------------------
+//The func for google's response
 func getGoogLocation(address string) OutputAddress{
 	client := &http.Client{}
 
@@ -99,19 +102,19 @@ func getGoogLocation(address string) OutputAddress{
 	req, err := http.NewRequest("GET", reqURL , nil)
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("error in sending req to google: ", err);	
+		fmt.Println("error sending req to google: ", err);	
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("error in reading response: ", err);	
+		fmt.Println("error reading response: ", err);	
 	}
 
 	var res GoogleResponse
 	err = json.Unmarshal(body, &res)
 	if err != nil {
-		fmt.Println("error in unmashalling response: ", err);	
+		fmt.Println("error unmashalling response: ", err);	
 	}
 
 	var ret OutputAddress
@@ -121,27 +124,22 @@ func getGoogLocation(address string) OutputAddress{
 	return ret;
 }
 
-//-----------------------------------------------------------------------------------
-
-
-// GetLocation retrieves an individual location resource
+// GetLocation retrieves one location resource
 func (uc LocationController) GetLocation(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	// Grab id
 	id := p.ByName("location_id")
-	// fmt.Println(id)
 	if !bson.IsObjectIdHex(id) {
         w.WriteHeader(404)
         return
     }
 
-    // Grab id
+    
     oid := bson.ObjectIdHex(id)
 	var o OutputAddress
 	if err := uc.session.DB("go_273").C("Locations").FindId(oid).One(&o); err != nil {
         w.WriteHeader(404)
         return
     }
-	// Marshal provided interface into JSON structure
+	// Marshal into JSON structure
 	uj, _ := json.Marshal(o)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -151,16 +149,14 @@ func (uc LocationController) GetLocation(w http.ResponseWriter, r *http.Request,
 
 
 
-// CreateLocation creates a new Location resource
+//create a new Location resource
 func (uc LocationController) CreateLocation(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	var u InputAddress
 	var oA OutputAddress
 
 	json.NewDecoder(r.Body).Decode(&u)	
-//Trying to get the lat lang!!!--------------------
 	googResCoor := getGoogLocation(u.Address + "+" + u.City + "+" + u.State + "+" + u.Zip);
     fmt.Println("resp is: ", googResCoor.Coordinate.Lat, googResCoor.Coordinate.Lang);
-	
 	oA.Id = bson.NewObjectId()
 	oA.Name = u.Name
 	oA.Address = u.Address
@@ -181,18 +177,15 @@ func (uc LocationController) CreateLocation(w http.ResponseWriter, r *http.Reque
 	fmt.Fprintf(w, "%s", uj)
 }
 
-// RemoveLocation removes an existing location resource
+// remove an existing location resource
 func (uc LocationController) RemoveLocation(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	// Grab id
 	id := p.ByName("location_id")
-	// fmt.Println(id)
-
-	// Verify id is ObjectId, otherwise bail
+	
 	if !bson.IsObjectIdHex(id) {
 		w.WriteHeader(404)
 		return
 	}
-	// Grab id
+	
 	oid := bson.ObjectIdHex(id)
 
 	// Remove user
